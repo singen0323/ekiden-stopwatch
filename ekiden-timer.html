@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>完成版・駅伝計測システム</title>
+    <style>
+        :root {
+            --primary-color: #333;
+            --accent-color: #0056b3;
+            --bg-color: #f4f4f9;
+            --card-bg: #fff;
+            --kuriage-color: #d9534f;
+        }
+
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--primary-color);
+        }
+
+        h1, h2, h3 { text-align: center; margin-bottom: 10px; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding-bottom: 50px; }
+        .hidden { display: none !important; }
+        
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin: 5px;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.8; }
+        .btn-primary { background-color: var(--accent-color); color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn-warning { background-color: #ffc107; color: black; }
+        .btn-outline { background-color: transparent; border: 2px solid #666; color: #666; }
+
+        /* 通知トースト */
+        #toast-notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: #fff;
+            padding: 15px 30px;
+            border-radius: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        #toast-notification.show { opacity: 1; }
+
+        /* 設定ファイル操作エリア */
+        .file-controls {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 1px dashed #999;
+        }
+
+        /* 設定画面 */
+        #setup-panel {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .team-setup-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .team-input-card {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            background: #fafafa;
+        }
+        .runner-inputs input { width: 90%; margin-bottom: 5px; padding: 5px; }
+
+        /* レース画面 */
+        #timer-display {
+            font-size: 4em;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            background: #222;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .race-grid {
+            display: flex;
+            overflow-x: auto;
+            gap: 10px;
+            padding-bottom: 20px;
+            min-height: 400px;
+        }
+
+        .team-column {
+            flex: 0 0 240px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-top: 10px solid #ccc;
+            position: relative;
+        }
+
+        .team-header { padding: 10px; text-align: center; font-weight: bold; border-bottom: 1px solid #eee; }
+        .current-runner { padding: 15px; text-align: center; background: #eef; flex-shrink: 0; }
+        .current-runner h4 { margin: 0 0 5px 0; font-size: 0.9em; color: #666; }
+        .current-runner p { margin: 0; font-size: 1.2em; font-weight: bold; }
+
+        .btn-tasuki { width: 100%; padding: 15px; font-size: 1.2em; margin:0; }
+        
+        .history-list {
+            flex-grow: 1;
+            padding: 10px;
+            border-top: 1px solid #eee;
+            font-size: 0.85em;
+            overflow-y: auto;
+            background: #fff;
+        }
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px dotted #ccc;
+        }
+        .history-item span:first-child { font-weight: bold; }
+        .kuriage-mark { color: red; font-weight: bold; }
+
+        /* 繰り上げメニュー */
+        #kuriage-menu {
+            background: #fff3cd; 
+            padding: 15px; 
+            text-align: center; 
+            border: 2px solid #ffeeba; 
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        /* 遅れ走者エリア */
+        #straggler-zone {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8d7da;
+            border: 2px solid #f5c6cb;
+            border-radius: 8px;
+        }
+        .straggler-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+        .straggler-card {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 5px solid #666;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            width: 200px;
+            text-align: center;
+        }
+
+        /* 結果テーブル */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9em; }
+        th, td { border: 1px solid #ddd; padding: 6px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        
+        .colored-rank {
+            color: white;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="toast-notification">通知メッセージ</div>
+
+<div class="container">
+    <h1>🏆 駅伝計測システム Final</h1>
+
+    <div id="setup-panel">
+        <div class="file-controls">
+            <h3>📂 データ管理</h3>
+            <button class="btn btn-outline" onclick="downloadSettings()">設定をファイルに保存</button>
+            <label class="btn btn-primary" style="display:inline-block; margin:5px;">
+                設定ファイルを読込
+                <input type="file" id="file-input" accept=".json" style="display:none" onchange="loadSettings(this)">
+            </label>
+        </div>
+
+        <h2>大会設定</h2>
+        <div style="text-align:center; margin-bottom:15px;">
+            <label>区間数: <input type="number" id="section-count" value="5" min="1" max="20" style="width: 50px;"></label>
+            <label style="margin-left: 20px;">チーム数: <input type="number" id="team-count" value="3" min="1" max="20" style="width: 50px;"></label>
+            <button class="btn btn-primary" onclick="generateSetupGrid()">入力欄生成</button>
+        </div>
+        
+        <div id="distance-setup" class="hidden" style="text-align:center; margin-bottom:15px;">
+            <h3>区間距離設定 (km)</h3>
+            <div id="distance-inputs" style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;"></div>
+        </div>
+
+        <div id="teams-setup" class="team-setup-grid"></div>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="btn btn-success" id="start-setup-btn" onclick="initializeRace()" disabled>設定完了・レース画面へ</button>
+        </div>
+    </div>
+
+    <div id="race-panel" class="hidden">
+        <div id="timer-display">00:00:00</div>
+        
+        <div style="text-align:center; margin-bottom:20px;">
+            <button class="btn btn-success" id="btn-start" onclick="startTimer()">スタート (号砲)</button>
+            <button class="btn btn-warning" id="btn-kuriage" onclick="toggleKuriageMenu()">繰り上げ処理...</button>
+            <button class="btn btn-primary" onclick="finishRace()">全計測終了・結果出力</button>
+        </div>
+
+        <div id="kuriage-menu" class="hidden">
+            <h3 style="color:var(--kuriage-color)">⚠️ 一斉繰り上げスタート</h3>
+            <p>現在走行中の走者を「まだコース上にいる」状態として残し、<br>次の走者を強制的にスタートさせます。</p>
+            <button class="btn btn-danger" onclick="executeKuriage()">実行する</button>
+            <button class="btn" onclick="toggleKuriageMenu()">キャンセル</button>
+        </div>
+
+        <div class="race-grid" id="race-grid"></div>
+
+        <div id="straggler-zone" class="hidden">
+            <h3 style="margin-top:0;">⏳ 遅れ走者 到着待ち</h3>
+            <div id="straggler-list" class="straggler-grid"></div>
+        </div>
+    </div>
+
+    <div id="result-panel" class="hidden" style="background: white; padding: 20px; margin-top: 20px;">
+        <h2>レース結果</h2>
+        <div style="text-align:center;">
+            <button class="btn btn-success" onclick="downloadExcel()">Excel(CSV)でダウンロード</button>
+            <button class="btn" onclick="location.reload()">最初に戻る</button>
+        </div>
+
+        <h3 style="margin-top:20px; border-bottom:2px solid #ccc;">総合順位</h3>
+        <div style="overflow-x: auto;">
+            <table id="result-table"></table>
+        </div>
+
+        <h3 style="margin-top:40px; border-bottom:2px solid #ccc;">区間賞・区間ランキング</h3>
+        <div id="section-ranking-container"></div>
+    </div>
+
+</div>
+
+<script>
+    // --- データ管理 ---
+    let config = {
+        sectionCount: 5,
+        teamCount: 3,
+        distances: []
+    };
+    
+    let teams = []; 
+    let pendingStragglers = []; 
+
+    let raceState = {
+        startTime: null,
+        timerInterval: null,
+        isRunning: false
+    };
+
+    // --- ユーティリティ ---
+    function formatTime(ms) {
+        if(!ms && ms !== 0) return "-";
+        const totalSec = Math.floor(ms / 1000);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+    function pad(n) { return n < 10 ? '0'+n : n; }
+    function getRandomColor() {
+        const letters = '0123456789ABCDEF';
+        let color = '#';
+        for (let i = 0; i < 6; i++) { color += letters[Math.floor(Math.random() * 16)]; }
+        return color;
+    }
+    
+    // トースト通知（Alertの代わり）
+    function showToast(message) {
+        const toast = document.getElementById('toast-notification');
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    }
+
+    // --- 設定画面ロジック ---
+    function generateSetupGrid() {
+        const sc = parseInt(document.getElementById('section-count').value);
+        const tc = parseInt(document.getElementById('team-count').value);
+        if(sc < 1 || tc < 1) return alert("数値を正しく入力してください");
+
+        config.sectionCount = sc;
+        config.teamCount = tc;
+
+        const distContainer = document.getElementById('distance-inputs');
+        distContainer.innerHTML = '';
+        document.getElementById('distance-setup').classList.remove('hidden');
+        
+        for(let i=1; i<=sc; i++){
+            let val = config.distances[i-1] || 5;
+            distContainer.innerHTML += `<div>${i}区: <input type="number" class="dist-val" style="width:50px" value="${val}">km</div>`;
+        }
+
+        const teamsContainer = document.getElementById('teams-setup');
+        teamsContainer.innerHTML = '';
+        
+        for(let i=1; i<=tc; i++){
+            let currentTeam = teams[i-1] || { name: `チーム${i}`, color: getRandomColor(), runners: [] };
+            let runnerInputs = '';
+            for(let s=1; s<=sc; s++){
+                let rName = currentTeam.runners[s-1] || "";
+                runnerInputs += `<input type="text" class="runner-name-input" data-section="${s}" value="${rName}" placeholder="${s}区走者名">`;
+            }
+
+            const html = `
+            <div class="team-input-card" id="team-setup-${i}">
+                <h3>No.${i}</h3>
+                <label>チーム名: <input type="text" class="team-name" value="${currentTeam.name}"></label><br>
+                <label>タスキ色: <input type="color" class="team-color" value="${currentTeam.color}"></label>
+                <div class="runner-inputs" style="margin-top:10px;">
+                    <strong>走者登録:</strong><br>
+                    ${runnerInputs}
+                </div>
+            </div>`;
+            teamsContainer.insertAdjacentHTML('beforeend', html);
+        }
+
+        document.getElementById('start-setup-btn').disabled = false;
+        document.getElementById('start-setup-btn').textContent = "設定完了・レース画面へ";
+    }
+
+    // --- 設定保存・読込 ---
+    function getSettingsObject() {
+        let dists = [];
+        document.querySelectorAll('.dist-val').forEach(el => dists.push(el.value));
+        
+        let currentTeams = [];
+        const container = document.getElementById('teams-setup');
+        if(container.children.length === 0) return null;
+
+        for(let i=1; i<=config.teamCount; i++){
+            const card = document.getElementById(`team-setup-${i}`);
+            const name = card.querySelector('.team-name').value;
+            const color = card.querySelector('.team-color').value;
+            const runners = [];
+            card.querySelectorAll('.runner-name-input').forEach(inp => runners.push(inp.value));
+            currentTeams.push({ name, color, runners });
+        }
+        return { sectionCount: config.sectionCount, teamCount: config.teamCount, distances: dists, teamsData: currentTeams };
+    }
+
+    function downloadSettings() {
+        const data = getSettingsObject();
+        if(!data) return alert("先に入力欄を生成してください");
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "ekiden_settings.json";
+        link.click();
+    }
+
+    function loadSettings(input) {
+        const file = input.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                document.getElementById('section-count').value = data.sectionCount;
+                document.getElementById('team-count').value = data.teamCount;
+                config.sectionCount = data.sectionCount;
+                config.teamCount = data.teamCount;
+                config.distances = data.distances;
+                teams = data.teamsData.map(t => ({ name: t.name, color: t.color, runners: t.runners }));
+                generateSetupGrid();
+                showToast("設定を読み込みました");
+            } catch(err) { alert("読込エラー: " + err); }
+        };
+        reader.readAsText(file);
+    }
+
+    // --- レース初期化 ---
+    function initializeRace() {
+        config.distances = [];
+        document.querySelectorAll('.dist-val').forEach(el => config.distances.push(el.value));
+
+        const tempTeamsData = getSettingsObject().teamsData;
+        teams = tempTeamsData.map((t, i) => ({
+            id: i,
+            name: t.name,
+            color: t.color,
+            runners: t.runners, 
+            currentSection: 0, 
+            splits: [], 
+            status: 'ready'
+        }));
+
+        document.getElementById('setup-panel').classList.add('hidden');
+        document.getElementById('race-panel').classList.remove('hidden');
+        renderRaceGrid();
+    }
+
+    // --- レース画面描画 ---
+    function renderRaceGrid() {
+        const grid = document.getElementById('race-grid');
+        grid.innerHTML = '';
+
+        teams.forEach((team, index) => {
+            let currentRunnerName = "待機中";
+            if (team.status === 'running') currentRunnerName = team.runners[team.currentSection] || "未登録";
+            else if (team.status === 'finished') currentRunnerName = "ゴール";
+
+            let btnDisabled = !raceState.isRunning || team.status === 'finished';
+            let btnText = "タスキを渡す";
+            if (team.currentSection === config.sectionCount - 1) btnText = "ゴール！";
+            if (team.status === 'finished') { btnText = "完走"; btnDisabled = true; }
+
+            // 修正1: 走行区間を表示する要素にクラス(section-label)を付与
+            const div = document.createElement('div');
+            div.className = 'team-column';
+            div.style.borderTopColor = team.color;
+            div.innerHTML = `
+                <div class="team-header" style="background-color:${team.color}22">
+                    <span style="font-size:1.1em">${team.name}</span>
+                </div>
+                <div class="current-runner" id="runner-box-${index}">
+                    <h4 class="section-label" id="section-label-${index}">現在走行中 (${team.status === 'finished' ? '-' : team.currentSection + 1}区)</h4>
+                    <p id="runner-name-${index}">${currentRunnerName}</p>
+                </div>
+                <div style="padding:10px;">
+                    <button class="btn btn-primary btn-tasuki" 
+                        id="btn-tasuki-${index}" 
+                        onclick="passTasuki(${index})" 
+                        ${btnDisabled ? 'disabled' : ''}
+                        style="background-color:${team.color}; color: white; text-shadow:0 1px 2px rgba(0,0,0,0.5);">
+                        ${btnText}
+                    </button>
+                </div>
+                <div class="history-list" id="history-${index}"></div>
+            `;
+            grid.appendChild(div);
+        });
+    }
+
+    function renderStragglers() {
+        const zone = document.getElementById('straggler-zone');
+        const list = document.getElementById('straggler-list');
+        list.innerHTML = '';
+        
+        if (pendingStragglers.length === 0) { zone.classList.add('hidden'); return; }
+
+        zone.classList.remove('hidden');
+        pendingStragglers.forEach((ps, idx) => {
+            const team = teams[ps.teamId];
+            const div = document.createElement('div');
+            div.className = 'straggler-card';
+            div.style.borderLeftColor = team.color;
+            div.innerHTML = `
+                <strong>${team.name}</strong><br>
+                <small>${ps.section}区</small> <span style="font-weight:bold">${ps.runnerName}</span><br>
+                <button class="btn btn-warning btn-sm" style="margin-top:5px; width:100%" 
+                    onclick="stragglerArrive(${idx})">到着 (計測)</button>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    // --- 計測ロジック ---
+    function startTimer() {
+        if(raceState.isRunning) return;
+        raceState.startTime = Date.now();
+        raceState.isRunning = true;
+        document.getElementById('btn-start').disabled = true;
+        document.getElementById('btn-start').textContent = "レース進行中";
+        
+        teams.forEach((t, i) => { t.status = 'running'; t.currentSection = 0; updateTeamUI(i); });
+
+        raceState.timerInterval = setInterval(() => {
+            const diff = Date.now() - raceState.startTime;
+            document.getElementById('timer-display').textContent = formatTime(diff);
+        }, 100);
+        document.querySelectorAll('.btn-tasuki').forEach(b => b.disabled = false);
+    }
+
+    function passTasuki(teamIndex) {
+        const team = teams[teamIndex];
+        if (team.status === 'finished') return;
+
+        const now = Date.now();
+        const finishTimeMs = now - raceState.startTime;
+        
+        if (team.currentSection === 0) team.sectionStartTime = 0;
+        const netTime = finishTimeMs - (team.sectionStartTime || 0);
+        
+        team.splits.push({
+            section: team.currentSection + 1,
+            runner: team.runners[team.currentSection],
+            startTime: team.sectionStartTime || 0,
+            finishTime: finishTimeMs,
+            netTime: netTime,
+            isKuriage: false,
+            isStraggler: false
+        });
+
+        advanceSection(teamIndex, finishTimeMs);
+    }
+
+    function advanceSection(teamIndex, nextStartTime) {
+        const team = teams[teamIndex];
+        if (team.currentSection < config.sectionCount - 1) {
+            team.currentSection++;
+            team.sectionStartTime = nextStartTime; 
+        } else {
+            team.status = 'finished';
+            team.finishTime = nextStartTime; 
+        }
+        updateTeamUI(teamIndex);
+        checkAllFinished();
+    }
+
+    function updateTeamUI(index) {
+        const team = teams[index];
+        const card = document.getElementById('race-grid').children[index];
+        
+        // 修正1: 走っている区間の表示テキストを更新
+        const sectionLabel = card.querySelector(`#section-label-${index}`);
+        if(team.status === 'finished') {
+            sectionLabel.textContent = "現在走行中 (-)";
+        } else {
+            sectionLabel.textContent = `現在走行中 (${team.currentSection + 1}区)`;
+        }
+
+        const runnerNameEl = card.querySelector(`#runner-name-${index}`);
+        if(team.status === 'finished') {
+            runnerNameEl.textContent = "ゴール";
+            runnerNameEl.style.color = "red";
+        } else {
+            runnerNameEl.textContent = team.runners[team.currentSection] || `走者${team.currentSection+1}`;
+            runnerNameEl.style.color = "black";
+        }
+
+        const historyList = card.querySelector(`#history-${index}`);
+        historyList.innerHTML = ''; 
+        [...team.splits].reverse().forEach(split => {
+             const div = document.createElement('div');
+             div.className = 'history-item';
+             div.innerHTML = `
+                <div>
+                    <span>${split.section}区 ${split.runner}</span>
+                    ${split.isKuriage ? '<span class="kuriage-mark">(繰)</span>' : ''}
+                </div>
+                <div style="text-align:right">
+                    <small>区間: ${formatTime(split.netTime)}</small><br>
+                    <span>通過: ${formatTime(split.finishTime)}</span>
+                </div>
+            `;
+            historyList.appendChild(div);
+        });
+
+        const btn = card.querySelector(`#btn-tasuki-${index}`);
+        if(team.status === 'finished') {
+            btn.textContent = "完走";
+            btn.disabled = true;
+        } else if (team.currentSection === config.sectionCount - 1) {
+            btn.textContent = "ゴール！";
+        } else {
+            btn.textContent = "タスキを渡す";
+        }
+    }
+
+    // --- 繰り上げスタート ---
+    function toggleKuriageMenu() {
+        document.getElementById('kuriage-menu').classList.toggle('hidden');
+    }
+
+    function executeKuriage() {
+        if(!raceState.isRunning) return;
+        const now = Date.now();
+        const currentTimeMs = now - raceState.startTime;
+        let minSec = 999;
+        teams.forEach(t => { if(t.status === 'running' && t.currentSection < minSec) minSec = t.currentSection; });
+        if(minSec === 999) { showToast("走行中のチームなし"); return; }
+
+        let count = 0;
+        teams.forEach((team, idx) => {
+            if(team.status === 'running' && team.currentSection === minSec) {
+                pendingStragglers.push({
+                    teamId: idx,
+                    section: team.currentSection + 1,
+                    runnerName: team.runners[team.currentSection],
+                    startTime: team.sectionStartTime || 0
+                });
+
+                if (team.currentSection < config.sectionCount - 1) {
+                    team.currentSection++;
+                    team.sectionStartTime = currentTimeMs; 
+                } else {
+                    team.status = 'finished';
+                    team.finishTime = currentTimeMs; 
+                }
+                updateTeamUI(idx); 
+                count++;
+            }
+        });
+
+        toggleKuriageMenu(); // メニューを閉じる
+        renderStragglers();
+        // 修正3: Alertポップアップを削除し、トースト通知に変更
+        showToast(`${count}チームを一斉繰り上げスタートしました`);
+    }
+
+    function stragglerArrive(psIndex) {
+        const ps = pendingStragglers[psIndex];
+        const team = teams[ps.teamId];
+        const now = Date.now();
+        const finishTimeMs = now - raceState.startTime;
+        const netTime = finishTimeMs - ps.startTime;
+
+        team.splits.push({
+            section: ps.section,
+            runner: ps.runnerName,
+            startTime: ps.startTime,
+            finishTime: finishTimeMs,
+            netTime: netTime,
+            isKuriage: true,
+            isStraggler: true
+        });
+        team.splits.sort((a,b) => a.section - b.section);
+        pendingStragglers.splice(psIndex, 1);
+        renderStragglers();
+        updateTeamUI(ps.teamId); 
+        showToast(`${team.name} 前走者が到着しました`);
+    }
+
+    // --- 終了・結果 ---
+    function checkAllFinished() {
+        const allFinished = teams.every(t => t.status === 'finished');
+        if(allFinished && pendingStragglers.length === 0) {
+            clearInterval(raceState.timerInterval);
+            document.getElementById('timer-display').style.color = "#fff";
+            document.getElementById('timer-display').textContent += " (全終了)";
+            // 修正3: Alertポップアップを削除
+            showToast("全チームゴールしました！");
+            finishRace();
+        }
+    }
+
+    function finishRace() {
+        clearInterval(raceState.timerInterval);
+        document.getElementById('race-panel').classList.add('hidden');
+        document.getElementById('result-panel').classList.remove('hidden');
+        generateResultTable();
+        generateSectionRanking();
+    }
+
+    function generateResultTable() {
+        const table = document.getElementById('result-table');
+        let html = `<thead><tr><th>順位</th><th>チーム名</th><th>総合タイム</th>`;
+        for(let i=1; i<=config.sectionCount; i++) html += `<th>${i}区</th>`;
+        html += `</tr></thead><tbody>`;
+
+        let sortedTeams = [...teams].sort((a, b) => {
+            if (!a.finishTime) return 1;
+            if (!b.finishTime) return -1;
+            return a.finishTime - b.finishTime;
+        });
+
+        sortedTeams.forEach((t, rank) => {
+            // 修正2: 順位カラムにチームカラーを適用
+            html += `<tr>
+                <td class="colored-rank" style="background-color:${t.color};">${t.finishTime ? rank + 1 : '-'}</td>
+                <td style="text-align:left">${t.name}</td>
+                <td style="font-weight:bold">${formatTime(t.finishTime)}</td>`;
+            
+            for(let i=1; i<=config.sectionCount; i++) {
+                const split = t.splits.find(s => s.section === i);
+                if(split) {
+                    let mark = split.isKuriage ? '<span style="color:red; font-size:0.8em">(繰)</span>' : '';
+                    html += `<td><strong>${formatTime(split.netTime)}</strong><br><small style="color:#666">${split.runner}</small> ${mark}</td>`;
+                } else {
+                    html += `<td>-</td>`;
+                }
+            }
+            html += `</tr>`;
+        });
+        html += `</tbody>`;
+        table.innerHTML = html;
+    }
+
+    function generateSectionRanking() {
+        const container = document.getElementById('section-ranking-container');
+        container.innerHTML = "";
+
+        for(let i=1; i<=config.sectionCount; i++) {
+            let sectionData = [];
+            teams.forEach(t => {
+                const split = t.splits.find(s => s.section === i);
+                if(split) sectionData.push({ teamName: t.name, color: t.color, runner: split.runner, netTime: split.netTime });
+            });
+            sectionData.sort((a, b) => a.netTime - b.netTime);
+
+            let html = `
+            <div style="margin-bottom:20px; background:#f9f9f9; padding:10px; border-radius:5px;">
+                <h4>${i}区 (${config.distances[i-1]||'?'}km)</h4>
+                <table style="width:100%; margin-top:5px;">
+                    <tr><th style="width:60px">順位</th><th>選手(チーム)</th><th>区間タイム</th></tr>`;
+            
+            sectionData.forEach((d, idx) => {
+                // 修正2: 区間賞順位にチームカラーを適用
+                html += `<tr>
+                    <td class="colored-rank" style="background-color:${d.color};">${idx+1}</td>
+                    <td style="text-align:left">${d.runner} <small>(${d.teamName})</small></td>
+                    <td>${formatTime(d.netTime)}</td>
+                </tr>`;
+            });
+            html += `</table></div>`;
+            container.innerHTML += html;
+        }
+    }
+
+    function downloadExcel() {
+        let csvContent = "\ufeff"; 
+        let header = ["順位", "チーム名", "総合タイム"];
+        for(let i=1; i<=config.sectionCount; i++) header.push(`${i}区走者`, `${i}区間タイム`, `${i}区通過`, "備考");
+        csvContent += header.join(",") + "\n";
+        let sortedTeams = [...teams].sort((a, b) => {
+            if (!a.finishTime) return 1;
+            if (!b.finishTime) return -1;
+            return a.finishTime - b.finishTime;
+        });
+
+        sortedTeams.forEach((t, rank) => {
+            let row = [ t.finishTime ? rank + 1 : '-', `"${t.name}"`, formatTime(t.finishTime) ];
+            for(let i=1; i<=config.sectionCount; i++) {
+                const split = t.splits.find(s => s.section === i);
+                if(split) {
+                    let note = split.isKuriage ? "繰り上げ" : "";
+                    row.push(`"${split.runner}"`, formatTime(split.netTime), formatTime(split.finishTime), note);
+                } else { row.push("-", "-", "-", "-"); }
+            }
+            csvContent += row.join(",") + "\n";
+        });
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `駅伝結果_Final_${new Date().toLocaleTimeString().replace(/:/g,'-')}.csv`;
+        link.click();
+    }
+</script>
+</body>
+</html>
