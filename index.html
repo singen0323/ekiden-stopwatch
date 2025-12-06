@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>完成版・駅伝計測システム</title>
+    <title>駅伝計測システム Pro (記録証機能付)</title>
     <style>
         :root {
             --primary-color: #333;
@@ -71,6 +71,20 @@
             border: 1px dashed #999;
         }
 
+        /* 大会情報入力エリア */
+        .meta-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        .meta-info-grid label { font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 5px; }
+        .meta-info-grid input { width: 95%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+
         /* 設定画面 */
         #setup-panel {
             background: var(--card-bg);
@@ -80,7 +94,7 @@
         }
         .team-setup-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 15px;
             margin-top: 20px;
         }
@@ -90,7 +104,44 @@
             border-radius: 5px;
             background: #fafafa;
         }
-        .runner-inputs input { width: 90%; margin-bottom: 5px; padding: 5px; }
+        
+        /* ドラッグ＆ドロップ可能な選手リスト */
+        .runner-sort-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0 0 0;
+        }
+        .runner-sort-item {
+            display: flex;
+            align-items: center;
+            background: #fff;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        .drag-handle {
+            cursor: move;
+            padding: 0 10px;
+            font-size: 1.2em;
+            color: #888;
+            user-select: none;
+        }
+        .runner-section-num {
+            font-weight: bold;
+            margin-right: 8px;
+            width: 30px;
+            text-align: center;
+            font-size: 0.8em;
+            background: #eee;
+            border-radius: 3px;
+        }
+        .runner-name-input {
+            flex-grow: 1;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
 
         /* レース画面 */
         #timer-display {
@@ -195,6 +246,207 @@
             font-size: 1.1em;
         }
 
+        /* --- 記録証（プレビュー＆印刷用スタイル） --- */
+        #print-preview-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            overflow-y: auto;
+        }
+        #print-preview-content {
+            background: #555;
+            min-height: 100%;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        .preview-controls {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 2001;
+            display: flex;
+            gap: 10px;
+        }
+
+        /* 記録証のスタイル（A4縦） */
+        .certificate-page {
+            width: 210mm; 
+            height: 297mm;
+            background: white;
+            position: relative;
+            box-sizing: border-box;
+            padding: 10mm 15mm; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: "Serif", "Mincho", "Hiragino Mincho ProN", serif;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+            page-break-after: always;
+            page-break-inside: avoid;
+        }
+
+        [contenteditable]:hover {
+            background-color: rgba(255, 255, 0, 0.1);
+            outline: 1px dashed #ccc;
+            cursor: text;
+        }
+        [contenteditable]:focus {
+            background-color: rgba(255, 255, 0, 0.2);
+            outline: none;
+        }
+        
+        .cert-frame {
+            position: absolute;
+            top: 10mm; left: 10mm; right: 10mm; bottom: 10mm;
+            border: 2px solid #b8860b;
+            outline: 4px double #b8860b;
+            outline-offset: 4px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .cert-layer { z-index: 1; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; }
+        
+        /* タイトル */
+        .cert-title { 
+            font-size: 5em; 
+            margin-top: 15mm;
+            margin-bottom: 10mm; 
+            letter-spacing: 0.3em; 
+            font-weight: bold; 
+            line-height: 1.0;
+        }
+
+        /* 名前・チームエリア */
+        .cert-header-area {
+            width: 90%;
+            margin-bottom: 10mm;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start; /* 左寄せ */
+        }
+
+        .cert-team-info {
+            font-size: 2.2em; /* チーム名サイズ */
+            font-weight: bold;
+            margin-bottom: 5px;
+            width: 100%;
+            text-align: left;
+            margin-left: 20px;
+        }
+
+        .cert-runner-line {
+            width: 100%;
+            text-align: center;
+            border-bottom: 1px solid transparent; 
+            display: flex;
+            justify-content: center;
+            align-items: baseline;
+            gap: 20px;
+            overflow: hidden; /* はみ出し防止 */
+        }
+
+        .cert-section-info {
+            font-size: 2.2em; /* チーム名と同じサイズ */
+            font-weight: bold;
+            white-space: nowrap; /* 改行禁止 */
+        }
+
+        .cert-runner-name {
+            font-size: 4.2em; 
+            font-weight: bold;
+            white-space: nowrap; /* 改行禁止 */
+        }
+        
+        /* 記録 */
+        .cert-record-area {
+            font-size: 2.5em; 
+            margin-top: 5mm;
+            margin-bottom: 10mm;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* 本文 */
+        .cert-text { 
+            font-size: 2em; 
+            margin: 0 5mm; 
+            line-height: 1.8; 
+            text-align: justify; 
+            width: 90%;
+            letter-spacing: 0.05em;
+        }
+
+        /* フッター */
+        .cert-footer { 
+            width: 90%; 
+            margin-top: auto; 
+            margin-bottom: 15mm;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; /* 中央揃え */
+            gap: 15px;
+        }
+        
+        .cert-date { 
+            width: 100%;
+            font-size: 1.6em; 
+            text-align: left; /* 左寄せ */
+            margin-bottom: 10px;
+        }
+
+        .cert-org {
+            font-size: 2.0em;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .cert-signer { 
+            text-align: center; 
+            font-size: 2.2em; 
+        }
+        .cert-signer-job { font-size: 0.6em; margin-right: 10px; }
+        .cert-signer-name { font-weight: bold; letter-spacing: 0.1em; }
+
+        @media print {
+            body > * { display: none !important; }
+            #print-preview-modal { 
+                display: block !important; 
+                position: static; 
+                background: none; 
+                width: 100%; height: auto; 
+                overflow: visible;
+            }
+            #print-preview-content {
+                background: none;
+                padding: 0;
+                display: block;
+            }
+            .preview-controls { display: none !important; }
+            .certificate-page {
+                box-shadow: none;
+                margin: 0;
+                width: 100%;
+                height: 100%; 
+                page-break-after: always;
+            }
+            [contenteditable]:hover { background: none; outline: none; }
+            
+            @page {
+                size: A4 portrait; 
+                margin: 0; 
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -202,23 +454,42 @@
 <div id="toast-notification">通知メッセージ</div>
 
 <div class="container">
-    <h1>🏆 駅伝計測システム Final</h1>
+    <h1>🏆 駅伝計測システム Pro</h1>
 
     <div id="setup-panel">
         <div class="file-controls">
             <h3>📂 データ管理</h3>
-            <button class="btn btn-outline" onclick="downloadSettings()">設定をファイルに保存</button>
-            <label class="btn btn-primary" style="display:inline-block; margin:5px;">
-                設定ファイルを読込
-                <input type="file" id="file-input" accept=".json" style="display:none" onchange="loadSettings(this)">
-            </label>
+            <div style="margin-bottom:10px;">
+                <strong>設定ファイル:</strong>
+                <button class="btn btn-outline" onclick="downloadSettings()">設定を保存</button>
+                <label class="btn btn-primary" style="display:inline-block; margin:5px;">
+                    設定を読込
+                    <input type="file" id="file-input" accept=".json" style="display:none" onchange="loadSettings(this)">
+                </label>
+            </div>
+            <div style="border-top:1px dashed #ccc; padding-top:10px;">
+                <strong>結果データ:</strong>
+                <label class="btn btn-warning" style="display:inline-block; margin:5px;">
+                    結果CSVを読込 (復元)
+                    <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="loadResultCSV(this)">
+                </label>
+            </div>
         </div>
 
-        <h2>大会設定</h2>
-        <div style="text-align:center; margin-bottom:15px;">
+        <h2>大会基本設定</h2>
+        <div class="meta-info-grid">
+            <div><label>大会名</label><input type="text" id="meta-title" value="校内駅伝大会"></div>
+            <div><label>開催日時</label><input type="datetime-local" id="meta-date"></div>
+            <div><label>主催学校・団体名</label><input type="text" id="meta-org" value="〇〇市立〇〇中学校"></div>
+            <div><label>主催者役職</label><input type="text" id="meta-job" value="校長"></div>
+            <div><label>主催者氏名</label><input type="text" id="meta-rep" value="〇〇 〇〇"></div>
+        </div>
+
+        <div style="text-align:center; margin-bottom:15px; padding: 15px; background: #eee; border-radius:8px;">
             <label>区間数: <input type="number" id="section-count" value="5" min="1" max="20" style="width: 50px;"></label>
             <label style="margin-left: 20px;">チーム数: <input type="number" id="team-count" value="3" min="1" max="20" style="width: 50px;"></label>
-            <button class="btn btn-primary" onclick="generateSetupGrid()">入力欄生成</button>
+            <button class="btn btn-primary" onclick="generateSetupGrid()">チーム・走者入力欄を生成</button>
+            <p style="font-size:0.8em; color:#666;">※生成後、選手の順番はドラッグ＆ドロップで入れ替え可能です。</p>
         </div>
         
         <div id="distance-setup" class="hidden" style="text-align:center; margin-bottom:15px;">
@@ -234,7 +505,8 @@
     </div>
 
     <div id="race-panel" class="hidden">
-        <div id="timer-display">00:00:00</div>
+        <h2 id="race-title-display"></h2>
+        <div id="timer-display">00:00.00</div>
         
         <div style="text-align:center; margin-bottom:20px;">
             <button class="btn btn-success" id="btn-start" onclick="startTimer()">スタート (号砲)</button>
@@ -260,7 +532,8 @@
     <div id="result-panel" class="hidden" style="background: white; padding: 20px; margin-top: 20px;">
         <h2>レース結果</h2>
         <div style="text-align:center;">
-            <button class="btn btn-success" onclick="downloadExcel()">Excel(CSV)でダウンロード</button>
+            <button class="btn btn-success" onclick="downloadExcel()">Excel(CSV)ダウンロード</button>
+            <button class="btn btn-warning" onclick="openCertificatePreview()">🖨️ 記録証を発行 (編集・印刷)</button>
             <button class="btn" onclick="location.reload()">最初に戻る</button>
         </div>
 
@@ -272,12 +545,24 @@
         <h3 style="margin-top:40px; border-bottom:2px solid #ccc;">区間賞・区間ランキング</h3>
         <div id="section-ranking-container"></div>
     </div>
+</div>
 
+<div id="print-preview-modal">
+    <div id="print-preview-content">
+        <div class="preview-controls">
+            <span style="align-self:center; font-weight:bold;">印刷プレビュー (文字をクリックして編集可能)</span>
+            <button class="btn btn-success" onclick="window.print()">🖨️ 印刷する</button>
+            <button class="btn btn-danger" onclick="closeCertificatePreview()">閉じる</button>
+        </div>
+        <div id="certificates-wrapper">
+            </div>
+    </div>
 </div>
 
 <script>
     // --- データ管理 ---
     let config = {
+        meta: { title: "", date: "", org: "", job: "", rep: "" },
         sectionCount: 5,
         teamCount: 3,
         distances: []
@@ -292,16 +577,44 @@
         isRunning: false
     };
 
+    // 初期化：日付入力を現在日時に
+    document.addEventListener('DOMContentLoaded', () => {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('meta-date').value = now.toISOString().slice(0,16);
+    });
+
     // --- ユーティリティ ---
-    function formatTime(ms) {
+    function formatTimeDigit(ms) { // 計測・画面・CSV用 (分:秒.1/100)
         if(!ms && ms !== 0) return "-";
-        const totalSec = Math.floor(ms / 1000);
-        const h = Math.floor(totalSec / 3600);
-        const m = Math.floor((totalSec % 3600) / 60);
-        const s = totalSec % 60;
-        return `${pad(h)}:${pad(m)}:${pad(s)}`;
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        const centis = Math.floor((ms % 1000) / 10);
+        return `${pad(minutes)}:${pad(seconds)}.${pad(centis)}`;
     }
+
+    function formatTime(ms) { // 記録証用 (分・秒・1/100)
+        if(!ms && ms !== 0) return "-";
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        const centis = Math.floor((ms % 1000) / 10);
+        return `${minutes}分${pad(seconds)}秒${pad(centis)}`;
+    }
+
+    function parseTimeStr(str) {
+        // "MM:SS.cc" または "MM:SS" をパースしてミリ秒に
+        if (!str || str === "-") return null;
+        const parts = str.split(':');
+        if(parts.length < 2) return null;
+        const min = parseInt(parts[0], 10);
+        const secParts = parts[1].split('.');
+        const sec = parseInt(secParts[0], 10);
+        const centi = secParts.length > 1 ? parseInt(secParts[1], 10) : 0;
+        return (min * 60000) + (sec * 1000) + (centi * 10);
+    }
+
     function pad(n) { return n < 10 ? '0'+n : n; }
+
     function getRandomColor() {
         const letters = '0123456789ABCDEF';
         let color = '#';
@@ -309,14 +622,11 @@
         return color;
     }
     
-    // トースト通知（Alertの代わり）
     function showToast(message) {
         const toast = document.getElementById('toast-notification');
         toast.textContent = message;
         toast.classList.add('show');
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
+        setTimeout(() => { toast.classList.remove('show'); }, 3000);
     }
 
     // --- 設定画面ロジック ---
@@ -328,34 +638,42 @@
         config.sectionCount = sc;
         config.teamCount = tc;
 
+        // 距離設定
         const distContainer = document.getElementById('distance-inputs');
         distContainer.innerHTML = '';
         document.getElementById('distance-setup').classList.remove('hidden');
-        
         for(let i=1; i<=sc; i++){
-            let val = config.distances[i-1] || 5;
+            let val = config.distances[i-1] || 3;
             distContainer.innerHTML += `<div>${i}区: <input type="number" class="dist-val" style="width:50px" value="${val}">km</div>`;
         }
 
+        // チーム設定
         const teamsContainer = document.getElementById('teams-setup');
         teamsContainer.innerHTML = '';
         
         for(let i=1; i<=tc; i++){
             let currentTeam = teams[i-1] || { name: `チーム${i}`, color: getRandomColor(), runners: [] };
-            let runnerInputs = '';
+            let runnerListHtml = '';
             for(let s=1; s<=sc; s++){
                 let rName = currentTeam.runners[s-1] || "";
-                runnerInputs += `<input type="text" class="runner-name-input" data-section="${s}" value="${rName}" placeholder="${s}区走者名">`;
+                runnerListHtml += `
+                    <li class="runner-sort-item" draggable="true" ondragstart="drag(event)" ondrop="drop(event)" ondragover="allowDrop(event)">
+                        <span class="drag-handle">≡</span>
+                        <span class="runner-section-num">${s}区</span>
+                        <input type="text" class="runner-name-input" value="${rName}" placeholder="走者名">
+                    </li>`;
             }
 
             const html = `
             <div class="team-input-card" id="team-setup-${i}">
-                <h3>No.${i}</h3>
+                <h3 style="margin:5px 0;">Team ${i}</h3>
                 <label>チーム名: <input type="text" class="team-name" value="${currentTeam.name}"></label><br>
                 <label>タスキ色: <input type="color" class="team-color" value="${currentTeam.color}"></label>
-                <div class="runner-inputs" style="margin-top:10px;">
-                    <strong>走者登録:</strong><br>
-                    ${runnerInputs}
+                <div style="margin-top:10px;">
+                    <strong>走者順 (ドラッグで入替可):</strong>
+                    <ul class="runner-sort-list" id="runner-list-${i}">
+                        ${runnerListHtml}
+                    </ul>
                 </div>
             </div>`;
             teamsContainer.insertAdjacentHTML('beforeend', html);
@@ -363,6 +681,36 @@
 
         document.getElementById('start-setup-btn').disabled = false;
         document.getElementById('start-setup-btn').textContent = "設定完了・レース画面へ";
+    }
+
+    // --- ドラッグ＆ドロップ制御 ---
+    let draggedItem = null;
+    function allowDrop(ev) { ev.preventDefault(); }
+    function drag(ev) {
+        draggedItem = ev.target.closest('li');
+        ev.dataTransfer.effectAllowed = "move";
+    }
+    function drop(ev) {
+        ev.preventDefault();
+        const targetItem = ev.target.closest('li');
+        if (draggedItem && targetItem && draggedItem !== targetItem && draggedItem.parentNode === targetItem.parentNode) {
+            const list = draggedItem.parentNode;
+            const items = Array.from(list.children);
+            const fromIndex = items.indexOf(draggedItem);
+            const toIndex = items.indexOf(targetItem);
+            if (fromIndex < toIndex) {
+                list.insertBefore(draggedItem, targetItem.nextSibling);
+            } else {
+                list.insertBefore(draggedItem, targetItem);
+            }
+            updateSectionLabels(list);
+        }
+    }
+    function updateSectionLabels(listElement) {
+        const items = listElement.querySelectorAll('.runner-sort-item');
+        items.forEach((item, index) => {
+            item.querySelector('.runner-section-num').textContent = `${index + 1}区`;
+        });
     }
 
     // --- 設定保存・読込 ---
@@ -382,7 +730,22 @@
             card.querySelectorAll('.runner-name-input').forEach(inp => runners.push(inp.value));
             currentTeams.push({ name, color, runners });
         }
-        return { sectionCount: config.sectionCount, teamCount: config.teamCount, distances: dists, teamsData: currentTeams };
+
+        const meta = {
+            title: document.getElementById('meta-title').value,
+            date: document.getElementById('meta-date').value,
+            org: document.getElementById('meta-org').value,
+            job: document.getElementById('meta-job').value,
+            rep: document.getElementById('meta-rep').value
+        };
+
+        return { 
+            meta: meta,
+            sectionCount: config.sectionCount, 
+            teamCount: config.teamCount, 
+            distances: dists, 
+            teamsData: currentTeams 
+        };
     }
 
     function downloadSettings() {
@@ -404,6 +767,15 @@
                 const data = JSON.parse(e.target.result);
                 document.getElementById('section-count').value = data.sectionCount;
                 document.getElementById('team-count').value = data.teamCount;
+                
+                if(data.meta) {
+                    document.getElementById('meta-title').value = data.meta.title || "";
+                    document.getElementById('meta-date').value = data.meta.date || "";
+                    document.getElementById('meta-org').value = data.meta.org || "";
+                    document.getElementById('meta-job').value = data.meta.job || "";
+                    document.getElementById('meta-rep').value = data.meta.rep || "";
+                }
+
                 config.sectionCount = data.sectionCount;
                 config.teamCount = data.teamCount;
                 config.distances = data.distances;
@@ -415,13 +787,111 @@
         reader.readAsText(file);
     }
 
+    // --- CSV読み込み (復元) ---
+    function loadResultCSV(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const text = e.target.result;
+                const lines = text.split(/\r\n|\n|\r/).filter(line => line.trim() !== "");
+
+                // 修正版CSVパース: カンマ区切り（引用符内無視）
+                const rows = lines.map(line => {
+                    return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(col => {
+                        return col.trim().replace(/^"|"$/g, '').replace(/""/g, '"');
+                    });
+                });
+
+                if (rows.length < 2) return alert("データがありません");
+
+                const header = rows[0];
+                let sc = 0;
+                header.forEach(h => { if (h.match(/\d+区走者/)) sc++; });
+
+                if (sc === 0) return alert("有効な駅伝結果CSVではありません");
+
+                config.sectionCount = sc;
+                config.teamCount = rows.length - 1;
+                document.getElementById('section-count').value = sc;
+                document.getElementById('team-count').value = config.teamCount;
+
+                teams = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const cols = rows[i];
+                    // CSV構造: Rank, TeamName, FinishTime, Runner1, Net1, Finish1, Note1...
+                    const teamName = cols[1];
+                    const finishTime = parseTimeStr(cols[2]);
+                    
+                    const runners = [];
+                    const splits = [];
+
+                    for (let s = 1; s <= sc; s++) {
+                        const baseIdx = 3 + (s - 1) * 4;
+                        const rName = cols[baseIdx] || "";
+                        const netTimeStr = cols[baseIdx + 1];
+                        const finishTimeStr = cols[baseIdx + 2];
+                        const note = cols[baseIdx + 3] || "";
+
+                        runners.push(rName);
+
+                        if (netTimeStr && netTimeStr !== "-") {
+                            splits.push({
+                                section: s,
+                                runner: rName,
+                                netTime: parseTimeStr(netTimeStr),
+                                finishTime: parseTimeStr(finishTimeStr),
+                                isKuriage: note.includes("繰り上げ")
+                            });
+                        }
+                    }
+
+                    teams.push({
+                        id: i - 1,
+                        name: teamName,
+                        color: getRandomColor(),
+                        runners: runners,
+                        currentSection: sc, 
+                        splits: splits,
+                        status: 'finished',
+                        finishTime: finishTime
+                    });
+                }
+
+                document.getElementById('setup-panel').classList.add('hidden');
+                document.getElementById('race-panel').classList.add('hidden'); 
+                document.getElementById('result-panel').classList.remove('hidden');
+                
+                const meta = {
+                    title: document.getElementById('meta-title').value,
+                    date: document.getElementById('meta-date').value,
+                    org: document.getElementById('meta-org').value,
+                    job: document.getElementById('meta-job').value,
+                    rep: document.getElementById('meta-rep').value
+                };
+                config.meta = meta;
+
+                generateResultTable();
+                generateSectionRanking();
+                showToast("結果CSVからデータを復元しました");
+
+            } catch (err) {
+                console.error(err);
+                alert("CSV読込エラー: 形式が不正です");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+
     // --- レース初期化 ---
     function initializeRace() {
-        config.distances = [];
-        document.querySelectorAll('.dist-val').forEach(el => config.distances.push(el.value));
-
-        const tempTeamsData = getSettingsObject().teamsData;
-        teams = tempTeamsData.map((t, i) => ({
+        const settings = getSettingsObject();
+        config.meta = settings.meta;
+        config.distances = settings.distances;
+        
+        teams = settings.teamsData.map((t, i) => ({
             id: i,
             name: t.name,
             color: t.color,
@@ -433,6 +903,7 @@
 
         document.getElementById('setup-panel').classList.add('hidden');
         document.getElementById('race-panel').classList.remove('hidden');
+        document.getElementById('race-title-display').textContent = config.meta.title; 
         renderRaceGrid();
     }
 
@@ -451,7 +922,6 @@
             if (team.currentSection === config.sectionCount - 1) btnText = "ゴール！";
             if (team.status === 'finished') { btnText = "完走"; btnDisabled = true; }
 
-            // 修正1: 走行区間を表示する要素にクラス(section-label)を付与
             const div = document.createElement('div');
             div.className = 'team-column';
             div.style.borderTopColor = team.color;
@@ -513,8 +983,8 @@
 
         raceState.timerInterval = setInterval(() => {
             const diff = Date.now() - raceState.startTime;
-            document.getElementById('timer-display').textContent = formatTime(diff);
-        }, 100);
+            document.getElementById('timer-display').textContent = formatTimeDigit(diff);
+        }, 10);
         document.querySelectorAll('.btn-tasuki').forEach(b => b.disabled = false);
     }
 
@@ -558,7 +1028,6 @@
         const team = teams[index];
         const card = document.getElementById('race-grid').children[index];
         
-        // 修正1: 走っている区間の表示テキストを更新
         const sectionLabel = card.querySelector(`#section-label-${index}`);
         if(team.status === 'finished') {
             sectionLabel.textContent = "現在走行中 (-)";
@@ -586,8 +1055,8 @@
                     ${split.isKuriage ? '<span class="kuriage-mark">(繰)</span>' : ''}
                 </div>
                 <div style="text-align:right">
-                    <small>区間: ${formatTime(split.netTime)}</small><br>
-                    <span>通過: ${formatTime(split.finishTime)}</span>
+                    <small>区間: ${formatTimeDigit(split.netTime)}</small><br>
+                    <span>通過: ${formatTimeDigit(split.finishTime)}</span>
                 </div>
             `;
             historyList.appendChild(div);
@@ -604,7 +1073,6 @@
         }
     }
 
-    // --- 繰り上げスタート ---
     function toggleKuriageMenu() {
         document.getElementById('kuriage-menu').classList.toggle('hidden');
     }
@@ -639,9 +1107,8 @@
             }
         });
 
-        toggleKuriageMenu(); // メニューを閉じる
+        toggleKuriageMenu();
         renderStragglers();
-        // 修正3: Alertポップアップを削除し、トースト通知に変更
         showToast(`${count}チームを一斉繰り上げスタートしました`);
     }
 
@@ -668,14 +1135,12 @@
         showToast(`${team.name} 前走者が到着しました`);
     }
 
-    // --- 終了・結果 ---
     function checkAllFinished() {
         const allFinished = teams.every(t => t.status === 'finished');
         if(allFinished && pendingStragglers.length === 0) {
             clearInterval(raceState.timerInterval);
             document.getElementById('timer-display').style.color = "#fff";
             document.getElementById('timer-display').textContent += " (全終了)";
-            // 修正3: Alertポップアップを削除
             showToast("全チームゴールしました！");
             finishRace();
         }
@@ -702,17 +1167,16 @@
         });
 
         sortedTeams.forEach((t, rank) => {
-            // 修正2: 順位カラムにチームカラーを適用
             html += `<tr>
                 <td class="colored-rank" style="background-color:${t.color};">${t.finishTime ? rank + 1 : '-'}</td>
                 <td style="text-align:left">${t.name}</td>
-                <td style="font-weight:bold">${formatTime(t.finishTime)}</td>`;
+                <td style="font-weight:bold">${formatTimeDigit(t.finishTime)}</td>`;
             
             for(let i=1; i<=config.sectionCount; i++) {
                 const split = t.splits.find(s => s.section === i);
                 if(split) {
                     let mark = split.isKuriage ? '<span style="color:red; font-size:0.8em">(繰)</span>' : '';
-                    html += `<td><strong>${formatTime(split.netTime)}</strong><br><small style="color:#666">${split.runner}</small> ${mark}</td>`;
+                    html += `<td><strong>${formatTimeDigit(split.netTime)}</strong><br><small style="color:#666">${split.runner}</small> ${mark}</td>`;
                 } else {
                     html += `<td>-</td>`;
                 }
@@ -742,11 +1206,10 @@
                     <tr><th style="width:60px">順位</th><th>選手(チーム)</th><th>区間タイム</th></tr>`;
             
             sectionData.forEach((d, idx) => {
-                // 修正2: 区間賞順位にチームカラーを適用
                 html += `<tr>
                     <td class="colored-rank" style="background-color:${d.color};">${idx+1}</td>
                     <td style="text-align:left">${d.runner} <small>(${d.teamName})</small></td>
-                    <td>${formatTime(d.netTime)}</td>
+                    <td>${formatTimeDigit(d.netTime)}</td>
                 </tr>`;
             });
             html += `</table></div>`;
@@ -766,12 +1229,12 @@
         });
 
         sortedTeams.forEach((t, rank) => {
-            let row = [ t.finishTime ? rank + 1 : '-', `"${t.name}"`, formatTime(t.finishTime) ];
+            let row = [ t.finishTime ? rank + 1 : '-', `"${t.name}"`, formatTimeDigit(t.finishTime) ];
             for(let i=1; i<=config.sectionCount; i++) {
                 const split = t.splits.find(s => s.section === i);
                 if(split) {
                     let note = split.isKuriage ? "繰り上げ" : "";
-                    row.push(`"${split.runner}"`, formatTime(split.netTime), formatTime(split.finishTime), note);
+                    row.push(`"${split.runner}"`, formatTimeDigit(split.netTime), formatTimeDigit(split.finishTime), note);
                 } else { row.push("-", "-", "-", "-"); }
             }
             csvContent += row.join(",") + "\n";
@@ -779,8 +1242,109 @@
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `駅伝結果_Final_${new Date().toLocaleTimeString().replace(/:/g,'-')}.csv`;
+        link.download = `駅伝結果_${config.meta.title}_${new Date().toLocaleTimeString().replace(/:/g,'-')}.csv`;
         link.click();
+    }
+
+    // --- 記録証プレビュー・印刷機能 ---
+    function openCertificatePreview() {
+        const wrapper = document.getElementById('certificates-wrapper');
+        wrapper.innerHTML = "";
+
+        const dateObj = new Date(config.meta.date);
+        let fiscalYear = dateObj.getFullYear();
+        if(dateObj.getMonth() + 1 < 4) fiscalYear -= 1;
+        const reiwaYear = fiscalYear - 2018;
+        const yearStr = reiwaYear === 1 ? "元" : reiwaYear;
+        const reiwaDateStr = `令和${yearStr}年${dateObj.getMonth()+1}月${dateObj.getDate()}日`;
+
+        let sortedTeams = [...teams].sort((a, b) => {
+            if (!a.finishTime) return 999999999; 
+            if (!b.finishTime) return -999999999;
+            return a.finishTime - b.finishTime;
+        });
+
+        const createCertHTML = (title, teamName, sectionInfo, runnerName, recordText, mainText) => `
+            <div class="certificate-page">
+                <div class="cert-frame"></div>
+                <div class="cert-layer">
+                    <div class="cert-title" contenteditable="true">${title}</div>
+                    
+                    <div class="cert-header-area">
+                        <div class="cert-team-info" contenteditable="true">${teamName}</div>
+                        <div class="cert-runner-line">
+                            <span class="cert-section-info" contenteditable="true">${sectionInfo}</span>
+                            <span class="cert-runner-name" contenteditable="true">${runnerName} 殿</span>
+                        </div>
+                    </div>
+                    
+                    <div class="cert-record-area" contenteditable="true">${recordText}</div>
+                    <div class="cert-text" contenteditable="true">${mainText}</div>
+                    
+                    <div class="cert-footer">
+                        <div class="cert-date" contenteditable="true">${reiwaDateStr}</div>
+                        <div class="cert-org" contenteditable="true">${config.meta.org}</div>
+                        <div class="cert-signer">
+                            <span class="cert-signer-job" contenteditable="true">${config.meta.job}</span>
+                            <span class="cert-signer-name" contenteditable="true">${config.meta.rep}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const commonText = `あなたは令和${yearStr}年度${config.meta.title}においてよく奮闘され頭書の成績を収められましたのでその栄誉を讃えこれを賞します`;
+
+        teams.forEach(team => {
+            const rank = sortedTeams.findIndex(t => t.id === team.id) + 1;
+            const rankText = team.finishTime ? `（総合${rank}位）` : `（記録なし）`;
+            
+            team.splits.forEach(split => {
+                const sectionSplits = [];
+                teams.forEach(t => {
+                    const s = t.splits.find(sp => sp.section === split.section);
+                    if(s) sectionSplits.push(s);
+                });
+                sectionSplits.sort((a, b) => a.netTime - b.netTime);
+                const sectionRank = sectionSplits.findIndex(s => s === split) + 1;
+
+                wrapper.insertAdjacentHTML('beforeend', createCertHTML(
+                    "記録証", 
+                    `${team.name}${rankText}`, 
+                    `第${split.section}区`, 
+                    `${split.runner}`, 
+                    `記録 ${formatTime(split.netTime)} (区間${sectionRank}位)`, 
+                    commonText 
+                ));
+            });
+        });
+
+        document.getElementById('print-preview-modal').style.display = 'block';
+        
+        // 選手名の自動サイズ調整
+        adjustFontSizes();
+    }
+
+    function adjustFontSizes() {
+        const names = document.querySelectorAll('.cert-runner-name');
+        names.forEach(nameEl => {
+            const line = nameEl.parentNode;
+            const sectionInfo = line.querySelector('.cert-section-info');
+            // 名前エリアの許容幅計算
+            const maxWidth = line.clientWidth - sectionInfo.offsetWidth - 50; 
+            
+            let fontSize = 4.2; // 初期サイズ
+            nameEl.style.fontSize = fontSize + 'em';
+            
+            while (nameEl.scrollWidth > maxWidth && fontSize > 1.0) {
+                fontSize -= 0.1;
+                nameEl.style.fontSize = fontSize + 'em';
+            }
+        });
+    }
+
+    function closeCertificatePreview() {
+        document.getElementById('print-preview-modal').style.display = 'none';
     }
 </script>
 </body>
